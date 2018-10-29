@@ -1,0 +1,363 @@
+html
+  head
+    title Paint!
+    meta(charset='utf-8')
+    meta(name='viewport' content='width=device-width, initial-scale=1')
+    style.
+      *{
+        margin: 0;
+        padding: 0;
+      }
+      canvas {
+        width: 100%;
+        height: 100%;
+        position:fixed;
+        left:0;
+        top:0;
+      }
+  body
+    section
+      canvas(id="canvB")
+      canvas(id="canvA")
+    script.
+      //ellipse polyfill
+      (function (CanvasRenderingContext2D, nodeRequire) {
+
+        if (CanvasRenderingContext2D == undefined) {
+          CanvasRenderingContext2D = nodeRequire('canvas').Context2d;
+        }
+
+        if (CanvasRenderingContext2D.prototype.ellipse == undefined) {
+          CanvasRenderingContext2D.prototype.ellipse = function(x, y, radiusX, radiusY, rotation, startAngle, endAngle, antiClockwise) {
+            this.save();
+            this.translate(x, y);
+            this.rotate(rotation);
+            this.scale(radiusX, radiusY);
+            this.arc(0, 0, 1, startAngle, endAngle, antiClockwise);
+            this.restore();
+          }
+        }
+      })(
+        typeof CanvasRenderingContext2D === "undefined" ? undefined : CanvasRenderingContext2D,
+        typeof require === "undefined" ? undefined : require
+      );
+      var canvasA = document.getElementById("canvA");
+      var ctxA = canvasA.getContext('2d');
+      var canvasB = document.getElementById("canvB");
+      var ctxB = canvasB.getContext('2d');
+      function randomRGB(){
+        return 'rgb('+Math.floor(Math.random()*256)+','+Math.floor(Math.random()*256)+','+Math.floor(Math.random()*256)+')';
+      };
+      function randomRange(num, offset){
+        return Math.random()*num*2-num+(offset || 0);//random number between -num and +num
+      }
+      window.addEventListener('resize', onResize);
+
+      var width = window.innerWidth;
+      var height = window.innerHeight;
+      var bgColour = 'black';
+      var localData = {
+        bgColour: localStorage.getItem('paint_bgColour')
+      };
+      if(localData.bgColour != null){
+        bgColour = localData.bgColour;
+        if(bgColour === 'black'){
+          bgColour = 'white';
+        } else if(bgColour === 'white'){
+          bgColour = 'black';
+        } else {
+          bgColour = randomRGB();
+        }
+      }
+      localStorage.setItem('paint_bgColour', bgColour);
+      function onResize(){
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvasA.width = width;
+        canvasA.height = height;
+        canvasB.width = width;
+        canvasB.height = height;
+        ctxB.fillStyle = bgColour;
+        ctxB.fillRect(0,0,width,height);
+      }
+
+      window.onload = function(){
+        var bLoop = true;
+        //player (p)
+        var p = {x:0,y:0,a:0,xv:0,yv:0,acc:0.3,maxV:3,accMultiplier:1};
+        var paint = [];
+        var m = {x:null,y:null,isDown:false};
+        function onMouseDown(e){
+          m.x = e.pageX-width/2;
+          m.y = e.pageY-height/2;
+          m.isDown = true;
+        };
+        function onMouseUp(){
+         m.isDown = false;
+        };
+        function onMouseMove(e){
+          m.x = e.pageX-width/2;
+          m.y = e.pageY-height/2;
+        }
+        window.addEventListener('mousedown', onMouseDown);
+        window.addEventListener('mouseup', onMouseUp);
+        window.addEventListener('mousemove', onMouseMove);
+        function dist(ax,ay,bx,by){
+          return  Math.sqrt(Math.pow(ax-bx,2)+Math.pow(ay-by,2));
+        }
+        var pixels = [];
+        function init(){
+          onResize();
+          p.x = width*p.x;
+          p.y = height*p.y;
+          var i = 0;
+          var j = 0;
+          var iLen = Math.floor(width);
+          var jLen = Math.floor(height);
+          var xpc = 0;
+          var ypc = 0;
+          var distTM = 0;
+          var distBL = 0;
+          var distBR = 0;
+          for(i=0;i<iLen;i++){
+            pixels[i] = [];
+            for(j=0;j<jLen;j++){
+              xpc = i/iLen;
+              ypc = j/jLen;
+              distTM = dist(0.5, 0, xpc, ypc);
+              distBL = dist(0, 0.75, xpc, ypc);
+              distBR = dist(1, 0.75, xpc, ypc);
+              //ctxB.fillStyle = RGB(distTM,distBL,distBR);;
+             //ctxB.fillRect(i,j,1,1);
+              pixels[i][j] = RGB(distTM,distBL,distBR);
+            }
+          }
+          /*
+          black to white
+          for(i=0;i<iLen;i++){
+            for(j=0;j<jLen;j++){
+              ctxB.fillStyle = RGB(Math.floor(256*(j/jLen)), Math.floor(256*(j/jLen)), Math.floor(256*(j/jLen)));
+              ctxB.fillRect(i,j,1,1);
+            }
+          }
+          */
+        }
+        function left(){
+          p.xv -= p.acc*p.accMultiplier;
+        };
+        function up(){
+          p.yv -= p.acc*p.accMultiplier;
+        };
+        function right(){
+          p.xv += p.acc*p.accMultiplier;
+        };
+        function down(){
+          p.yv += p.acc*p.accMultiplier;
+        };
+        var keyDown = [];
+        function directionFromKeyCode(code, cb){
+          if (code === 38 || code === 87) {
+            cb('up');
+          } else if (code === 40 || code === 83) {
+            cb('down');
+          } else if (code === 37 || code === 65) {
+            cb('left');
+          } else if (code === 39 || code === 68) {
+            cb('right');
+          } else {
+            cb('none');
+          }
+        };
+        document.onkeydown = function(e) {
+          e = e || window.event;
+          directionFromKeyCode(e.keyCode, function(dir){
+            if(keyDown.indexOf(dir)==-1){
+              keyDown.push(dir);
+            }
+          });
+        };
+        document.onkeyup = function(e){
+          e = e || window.event;
+          directionFromKeyCode(e.keyCode, function(dir){
+            var index = keyDown.indexOf(dir);
+            if(index != -1){
+              keyDown.splice(index, 1);
+            }
+          });
+        }
+        var frame = 0;
+        function loop(){
+          if(bLoop){
+            frame ++;
+            update();
+            draw();
+            requestAnimationFrame(loop);
+          }
+        };
+        function createSplats(n,x,y,tx,ty,size,angle,colour){
+          var i = 0;
+          var splats = [];
+          for(i=0;i<n;i++){
+            splats.push(createSplat(x,y,tx,ty,size,angle || randomRange(Math.PI), colour));
+          }
+          return splats;
+        }
+        function createSplat(x,y,tx,ty,size,angle,colour){
+          var newColour = pixels[Math.floor(tx+width/2)];
+          var a = angle+randomRange(Math.PI/(Math.random()*4+1));
+          var d = getRndBias(size/2, size*4, size, 1);//Math.random()*size*1;
+          if(typeof newColour != 'undefined'){
+            newColour = newColour[Math.floor(ty+height/2)];
+          }
+          newColour = newColour || randomRGB();
+          return {x:x,y:y,sx:x,sy:y,tx:tx+Math.cos(a)*d,ty:ty+Math.sin(a)*d,size:Math.random()*(size*0.8)+(size*0.2),colour:colour || newColour,hitFloor:false};
+        }
+        function getRndBias(min, max, bias, influence) {
+            var rnd = Math.random() * (max - min) + min,   // random in range
+                mix = Math.random() * influence;           // random mixer
+            return rnd * (1 - mix) + bias * mix;           // mix full range and bias
+        }
+        function update(){
+          keyDown.forEach(function(dir){
+            switch(dir){
+              case 'none':
+              break;
+              case 'left':
+                left();
+              break;
+              case 'up':
+                up();
+              break;
+              case 'right':
+                right();
+              break;
+              case 'down':
+                down();
+              break;
+              default:
+                console.warn("error in update, keydown unknown:", keyDown);
+              break;
+            }
+          });
+          p.accMultiplier = 1;
+          if(keyDown.indexOf('left') != -1 || keyDown.indexOf('right') != -1){
+            if(keyDown.indexOf('up') != -1 || keyDown.indexOf('down') != -1){
+              p.accMultiplier = 0.66;
+            }
+          }
+          if(p.xv !== 0){
+            p.x += p.xv;
+            p.xv *= 0.9;
+          }
+          if(p.yv !== 0){
+            p.y += p.yv;
+            p.yv *= 0.9;
+          }
+          if(m.isDown){
+            //shooting
+            /*if(paint.length === 0){
+              paint = createSplats(Math.ceil(Math.random()*9),m.x,m.y,0,randomRGB());
+            }*/
+            if(frame%2==0){
+              var angle = randomRange(Math.PI);
+              var dist = Math.random()*6;
+              angle = Math.atan2(m.y+Math.sin(angle)*dist - p.y, m.x+Math.cos(angle)*dist - p.x);
+              dist = Math.sqrt(Math.pow(m.x-p.x, 2)+Math.pow(m.y-p.y, 2));
+              dist *= (getRndBias(0.25, 1.75, 1, 1)+getRndBias(0.25, 1.75, 1, 1))/2;
+              paint = paint.concat(createSplats(Math.ceil(Math.random()*8),p.x,p.y,p.x+Math.cos(angle)*dist,p.y+Math.sin(angle)*dist,Math.random()*3,angle));
+            }
+          }
+          paint.forEach(function(ball){
+            var angle = Math.atan2(ball.ty - ball.sy, ball.tx -  ball.sx);
+            var speed = Math.random()+8;
+            var dist = Math.sqrt(Math.pow(ball.x-ball.tx, 2)+Math.pow(ball.y-ball.ty, 2));
+            ball.x += Math.cos(angle)*speed;
+            ball.y += Math.sin(angle)*speed;
+            if(dist <= speed){
+              ball.hitFloor = true;
+              ball.size = ball.size;
+            }
+          });
+        };
+
+        function RGB(r,g,b){
+          return 'rgb('+Math.floor(r*256)+','+Math.floor(g*256)+','+Math.floor(b*256)+')';
+        };
+        function draw(){
+          //draw background
+          ctxA.clearRect(0, 0, width, height);
+          ctxA.translate(width/2, height/2);
+          ctxB.translate(width/2, height/2);
+          //ctxB.filter = 'blur(0.5px)';
+          var rndNo = Math.floor(Math.random()*4);
+          if(rndNo === 0){
+            ctxB.globalCompositeOperation = 'source-over';
+          } else {
+            ctxB.globalCompositeOperation = 'hard-light';
+          }
+          //draw paint
+          paint.forEach(function(ball, i){
+            if(ball.hitFloor){
+              var angle = Math.atan2(ball.ty - ball.sy, ball.tx - ball.sx);
+              ctxB.beginPath();
+              ctxB.moveTo(ball.tx, ball.ty);
+              ctxB.ellipse(ball.tx, ball.ty, ball.size*(Math.random()+1), ball.size*(Math.random()*0.25+0.75), angle, 0, Math.PI*2);
+              ctxB.fillStyle = ball.colour;
+              ctxB.fill();
+              ctxB.closePath();
+              paint.splice(i, 1);
+            } else {
+              ctxA.beginPath();
+              ctxA.moveTo(ball.x, ball.y);
+              ctxA.arc(ball.x, ball.y, ball.size, 0, Math.PI*2);
+              ctxA.fillStyle = ball.colour;
+              ctxA.fill();
+              ctxA.closePath();
+            }
+          });
+         // ctx.globalCompositeOperation = 'source-over';
+          //draw p
+          ctxA.beginPath();
+          ctxA.moveTo(p.x, p.y);
+          ctxA.arc(p.x,p.y,10, 0, Math.PI*2);
+          ctxA.strokeStyle = 'rgb(0,0,0)';
+          ctxA.stroke();
+          ctxA.fillStyle = 'rgb(255,255,255)';
+          ctxA.fill();
+          ctxA.closePath();
+
+
+          ctxA.translate(-width/2, -height/2);
+          ctxB.translate(-width/2, -height/2);
+        };
+        init();
+        loop();
+      };
+      // http://paulirish.com/2011/requestanimationframe-for-smart-animating/
+      // http://my.opera.com/emoller/blog/2011/12/20/requestanimationframe-for-smart-er-animating
+      // requestAnimationFrame polyfill by Erik Möller. fixes from Paul Irish and Tino Zijdel
+      // MIT license
+      (function() {
+          var lastTime = 0;
+          var vendors = ['ms', 'moz', 'webkit', 'o'];
+          for(var x = 0; x < vendors.length && !window.requestAnimationFrame; ++x) {
+              window.requestAnimationFrame = window[vendors[x]+'RequestAnimationFrame'];
+              window.cancelAnimationFrame = window[vendors[x]+'CancelAnimationFrame']
+                                         || window[vendors[x]+'CancelRequestAnimationFrame'];
+          }
+
+          if (!window.requestAnimationFrame)
+              window.requestAnimationFrame = function(callback, element) {
+                  var currTime = new Date().getTime();
+                  var timeToCall = Math.max(0, 16 - (currTime - lastTime));
+                  var id = window.setTimeout(function() { callback(currTime + timeToCall); },
+                    timeToCall);
+                  lastTime = currTime + timeToCall;
+                  return id;
+              };
+
+          if (!window.cancelAnimationFrame)
+              window.cancelAnimationFrame = function(id) {
+                  clearTimeout(id);
+              };
+      }());
