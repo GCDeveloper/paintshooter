@@ -88,20 +88,34 @@ html
         var paint = [];
         var m = {x:null,y:null,isDown:false};
         function onMouseDown(e){
-          m.x = e.pageX-width/2;
-          m.y = e.pageY-height/2;
+          if(e.touches && e.touches.length >= 1){
+            m.x = e.touches[0].pageX-width/2;
+            m.y = e.touches[0].pageY-height/2;
+          } else {
+            m.x = e.pageX-width/2;
+            m.y = e.pageY-height/2;
+          }
+
           m.isDown = true;
         };
         function onMouseUp(){
          m.isDown = false;
         };
         function onMouseMove(e){
-          m.x = e.pageX-width/2;
-          m.y = e.pageY-height/2;
+          if(e.touches && e.touches.length >= 1){
+            m.x = e.touches[0].pageX-width/2;
+            m.y = e.touches[0].pageY-height/2;
+          } else {
+            m.x = e.pageX-width/2;
+            m.y = e.pageY-height/2;
+          }
         }
         window.addEventListener('mousedown', onMouseDown);
         window.addEventListener('mouseup', onMouseUp);
         window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('touchstart', onMouseDown);
+        window.addEventListener('touchend', onMouseUp);
+        window.addEventListener('touchmove', onMouseMove);
         function dist(ax,ay,bx,by){
           return  Math.sqrt(Math.pow(ax-bx,2)+Math.pow(ay-by,2));
         }
